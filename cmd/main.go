@@ -10,17 +10,11 @@ import (
 )
 
 func main() {
-
 	port := "8080"
 
+	// Создаем новый роутер
 	router := frameworks.NewRouter()
-
-	mailService := services.NewMailService(
-		"smtp.gmail.com",         // SMTP-сервер
-		"587",                    // Порт SMTP
-		"danelmusina1@gmail.com", // Логин
-		"Md310804@",              // Пароль
-	)
+	mailService := services.NewMailService("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")
 
 	// Регистрируем маршруты
 	handlers.RegisterRoutes(router) // Для архивации
