@@ -19,27 +19,7 @@ Content-Type: multipart/form-data
 Field: file
 Upload a single ZIP file to get a list of the contents. Use Postman to send a POST request with the file in the file field.
 
-Response Example:
 
-json
-Копировать код
-{
-  "filename": "example.zip",
-  "total_size": 4.55,
-  "total_files": 3,
-  "files": [
-    {
-      "file_path": "document.docx",
-      "size": 0.05,
-      "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    },
-    {
-      "file_path": "image.jpg",
-      "size": 4.43,
-      "mimetype": "image/jpeg"
-    }
-  ]
-}
 Create a ZIP Archive
 Endpoint: POST /api/archive/files
 Content-Type: multipart/form-data
