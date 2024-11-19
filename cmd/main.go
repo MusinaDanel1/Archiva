@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
@@ -14,7 +15,11 @@ func main() {
 
 	// Создаем новый роутер
 	router := frameworks.NewRouter()
-	mailService := services.NewMailService("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")
+	apiKey := os.Getenv("SENDGRID_API_KEY")
+	if apiKey == "" {
+		log.Fatal("API ключ не найден")
+	}
+	mailService := services.NewMailService(apiKey)
 
 	// Регистрируем маршруты
 	handlers.RegisterRoutes(router) // Для архивации
