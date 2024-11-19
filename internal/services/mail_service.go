@@ -2,31 +2,28 @@ package services
 
 import (
 	"archiva/internal/models"
-	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
-	"mime/multipart"
-	"net/mail"
-	"net/smtp"
+	"net/http"
 	"os"
+
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 type MailService struct {
-	SMTPServer   string
-	SMTPPort     string
-	SMTPUser     string
-	SMTPPassword string
+	APIKey string
 }
 
-func NewMailService(smtpServer, smtpPort, smtoUser, smtpPassword string) *MailService {
+// Конструктор MailService
+func NewMailService(apiKey string) *MailService {
 	return &MailService{
-		SMTPServer:   smtpServer,
-		SMTPPort:     smtpPort,
-		SMTPUser:     smtoUser,
-		SMTPPassword: smtpPassword,
+		APIKey: apiKey,
 	}
 }
 
+// Проверка допустимого MIME-типа
 func (m *MailService) IsValidMimeType(mimeType string) bool {
 	validMimeTypes := []string{
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -40,27 +37,8 @@ func (m *MailService) IsValidMimeType(mimeType string) bool {
 	return false
 }
 
+// Логика отправки файла через SendGrid
 func (m *MailService) SendFile(emailRequest models.EmailRequest) error {
-	// Проверяем MIME тип
-	if !m.IsValidMimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document") &&
-		!m.IsValidMimeType("application/pdf") {
-		return fmt.Errorf("неподдерживаемый формат файла")
-	}
-
-	// Подготовка письма
-	subject := "File Attached"
-	body := "Please find the attached file."
-
-	// Создание сообщения
-	msg := &mail.Message{
-		Header: map[string][]string{
-			"From":    {m.SMTPUser},
-			"To":      emailRequest.EmailAddresses,
-			"Subject": {subject},
-		},
-		Body: bytes.NewBufferString(body),
-	}
-
 	// Открываем файл
 	file, err := os.Open(emailRequest.FilePath)
 	if err != nil {
@@ -68,31 +46,58 @@ func (m *MailService) SendFile(emailRequest models.EmailRequest) error {
 	}
 	defer file.Close()
 
-	// Создаем multipart
-	var buffer bytes.Buffer
-	writer := multipart.NewWriter(&buffer)
-
-	// Создаём форму для файла
-	part, err := writer.CreateFormFile("attachment", emailRequest.Filename)
-	if err != nil {
-		return fmt.Errorf("не удалось создать файл в форме: %w", err)
+	// Определяем MIME-тип
+	fileBytes := make([]byte, 512) // Читаем первые 512 байт
+	if _, err := file.Read(fileBytes); err != nil {
+		return fmt.Errorf("не удалось прочитать файл: %w", err)
 	}
-	_, err = io.Copy(part, file)
-	if err != nil {
-		return fmt.Errorf("не удалось скопировать файл: %w", err)
+	mimeType := http.DetectContentType(fileBytes)
+	if !m.IsValidMimeType(mimeType) {
+		return fmt.Errorf("неподдерживаемый формат файла: %s", mimeType)
 	}
 
-	// Закрываем writer
-	writer.Close()
-
-	// Устанавливаем Content-Type
-	msg.Header["Content-Type"] = []string{fmt.Sprintf("multipart/mixed; boundary=%s", writer.Boundary())}
-
-	// Отправляем письмо
-	auth := smtp.PlainAuth("", m.SMTPUser, m.SMTPPassword, m.SMTPServer)
-	err = smtp.SendMail(m.SMTPServer+":"+m.SMTPPort, auth, m.SMTPUser, emailRequest.EmailAddresses, buffer.Bytes()) // исправлено
+	// Сбрасываем указатель файла
+	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
-		return fmt.Errorf("не удалось отправить письмо: %w", err)
+		return fmt.Errorf("ошибка при сбросе указателя файла: %w", err)
+	}
+
+	// Подготавливаем данные для отправки через SendGrid
+	from := mail.NewEmail("user1", "musinadanel1@gmail.com")
+	subject := "File Attached"
+	to := mail.NewEmail("Recipient", emailRequest.EmailAddresses[0])
+	plainTextContent := "Please find the attached file."
+	htmlContent := "<strong>Please find the attached file.</strong>"
+
+	message := mail.NewSingleEmail(from, subject, to, plainTextContent, htmlContent)
+
+	// Читаем файл в память
+	fileContent, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("не удалось прочитать файл в память: %w", err)
+	}
+
+	// Кодируем содержимое файла в Base64
+	encodedContent := base64.StdEncoding.EncodeToString(fileContent)
+
+	// Присоединяем файл к письму
+	attachment := mail.NewAttachment()
+	attachment.SetContent(encodedContent)
+	attachment.SetType(mimeType)
+	attachment.SetFilename(emailRequest.Filename)
+	attachment.SetDisposition("attachment")
+	message.AddAttachment(attachment)
+
+	// Создаем клиент SendGrid и отправляем письмо
+	client := sendgrid.NewSendClient(m.APIKey)
+	response, err := client.Send(message)
+	if err != nil {
+		return fmt.Errorf("ошибка при отправке email через SendGrid: %w", err)
+	}
+
+	// Проверяем статус ответа
+	if response.StatusCode >= 400 {
+		return fmt.Errorf("ошибка при отправке email через SendGrid: %s", response.Body)
 	}
 
 	return nil
