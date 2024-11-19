@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+
 	port := "8080"
 
 	err := godotenv.Load("cmd/.env")

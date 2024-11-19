@@ -34,5 +34,7 @@ func ArchiveHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func RegisterRoutes(r *frameworks.Router) {
-	r.Handle("POST", "/api/archive", ArchiveHandler)
+	r.Handle("POST", "/api/archive/files", ArchiveFilesHandler) // Обработчик для файлов
+	r.Handle("POST", "/api/archive", ArchiveHandler)            // Обработчик для архива
+
 }
